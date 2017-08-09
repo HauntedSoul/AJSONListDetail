@@ -1,19 +1,20 @@
 package com.vitordinis.ajsonlistdetail;
 
-import android.app.ProgressDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.UserManager;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -21,26 +22,20 @@ import android.widget.Toast;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
-import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
-import org.json.JSONArray;
-
-import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
-import java.net.HttpURLConnection;
-import java.net.Proxy;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class UserListActivity extends AppCompatActivity {
 
     private static final String USER_LIST_URL = "https://jsonplaceholder.typicode.com/users";
+    private static final String IMAGE_URL = "http://via.placeholder.com/200x200?text=";
     /**
      * Whether or not the activity is in two-pane mode, i.e. running on a tablet
      * device.
@@ -58,17 +53,14 @@ public class UserListActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         toolbar.setTitle(getTitle());
 
-        //TODO: Do the background get and this on success
         StringRequest request = new StringRequest(USER_LIST_URL, new Response.Listener<String>() {
 
 
             @Override
             public void onResponse(String response) {
-                //TODO: Parse the array and update recycler view
                 Gson gson = new Gson();
                 Type listType = new TypeToken<List<UserModel>>(){}.getType();
-                List<UserModel> users = gson.fromJson(response, listType);
-                userList = users;
+                userList = gson.fromJson(response, listType);
                 View recyclerView = findViewById(R.id.user_list);
                 assert recyclerView != null;
                 setupRecyclerView((RecyclerView) recyclerView);
@@ -77,7 +69,6 @@ public class UserListActivity extends AppCompatActivity {
             @Override
             public void onErrorResponse(VolleyError error) {
                 Toast.makeText(UserListActivity.this, "Error getting user list!", Toast.LENGTH_SHORT).show();
-                // Hide the loading dialog
             }
         });
 
@@ -94,23 +85,15 @@ public class UserListActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerView(@NonNull RecyclerView recyclerView) {
-        recyclerView.setAdapter(new SimpleItemRecyclerViewAdapter(userList));
+        recyclerView.setAdapter(new UserListRecyclerViewAdapter(userList));
     }
 
-    public UserModel getUser(String username) {
-        for(UserModel user : userList) {
-            if (user.username.equals(username))
-                return user;
-        }
-        return null;
-    }
-
-    public class SimpleItemRecyclerViewAdapter
-            extends RecyclerView.Adapter<SimpleItemRecyclerViewAdapter.ViewHolder> {
+    class UserListRecyclerViewAdapter
+            extends RecyclerView.Adapter<UserListRecyclerViewAdapter.ViewHolder> {
 
         private final List<UserModel> mValues;
 
-        public SimpleItemRecyclerViewAdapter(List<UserModel> items) {
+        UserListRecyclerViewAdapter(List<UserModel> items) {
             mValues = items;
         }
 
@@ -124,15 +107,16 @@ public class UserListActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(final ViewHolder holder, int position) {
             holder.mItem = mValues.get(position);
-            holder.mIdView.setText(mValues.get(position).id);
-            holder.mContentView.setText(mValues.get(position).name);
-
+            holder.mEmailView.setText(String.valueOf(mValues.get(position).email));
+            holder.mNameView.setText(mValues.get(position).name);
+            new DownloadImageTask(holder.mImageView).execute(IMAGE_URL + mValues.get(position).username);
+            final Gson gson = new Gson();
             holder.mView.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     if (mTwoPane) {
                         Bundle arguments = new Bundle();
-                        arguments.putString(UserDetailFragment.ARG_ITEM_ID, holder.mItem.username);
+                        arguments.putString(UserDetailFragment.ARG_USER_JSON, gson.toJson(holder.mItem));
                         UserDetailFragment fragment = new UserDetailFragment();
                         fragment.setArguments(arguments);
                         getSupportFragmentManager().beginTransaction()
@@ -141,7 +125,7 @@ public class UserListActivity extends AppCompatActivity {
                     } else {
                         Context context = v.getContext();
                         Intent intent = new Intent(context, UserDetailActivity.class);
-                        intent.putExtra(UserDetailFragment.ARG_ITEM_ID, holder.mItem.id);
+                        intent.putExtra(UserDetailFragment.ARG_USER_JSON, gson.toJson(holder.mItem));
 
                         context.startActivity(intent);
                     }
@@ -154,23 +138,50 @@ public class UserListActivity extends AppCompatActivity {
             return mValues.size();
         }
 
-        public class ViewHolder extends RecyclerView.ViewHolder {
-            public final View mView;
-            public final TextView mIdView;
-            public final TextView mContentView;
-            public UserModel mItem;
+        class ViewHolder extends RecyclerView.ViewHolder {
+            final View mView;
+            final TextView mEmailView;
+            final TextView mNameView;
+            final ImageView mImageView;
+            UserModel mItem;
 
-            public ViewHolder(View view) {
+            ViewHolder(View view) {
                 super(view);
                 mView = view;
-                mIdView = (TextView) view.findViewById(R.id.id);
-                mContentView = (TextView) view.findViewById(R.id.content);
+                mEmailView = view.findViewById(R.id.email);
+                mNameView = view.findViewById(R.id.name);
+                mImageView = view.findViewById(R.id.image);
             }
 
             @Override
             public String toString() {
-                return super.toString() + " '" + mContentView.getText() + "'";
+                return super.toString() + " '" + mNameView.getText() + "'";
             }
+        }
+    }
+
+    private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
+        ImageView bmImage;
+
+        DownloadImageTask(ImageView bmImage) {
+            this.bmImage = bmImage;
+        }
+
+        protected Bitmap doInBackground(String... urls) {
+            String urldisplay = urls[0];
+            Bitmap mIcon11 = null;
+            try {
+                InputStream in = new java.net.URL(urldisplay).openStream();
+                mIcon11 = BitmapFactory.decodeStream(in);
+            } catch (Exception e) {
+                Log.e("Error", e.getMessage());
+                e.printStackTrace();
+            }
+            return mIcon11;
+        }
+
+        protected void onPostExecute(Bitmap result) {
+            bmImage.setImageBitmap(result);
         }
     }
 }

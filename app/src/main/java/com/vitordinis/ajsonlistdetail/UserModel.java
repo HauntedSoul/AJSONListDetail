@@ -1,5 +1,10 @@
 package com.vitordinis.ajsonlistdetail;
 
+import android.os.Parcel;
+import android.os.Parcelable;
+
+import java.util.List;
+
 /**
  * Created by haunted on 08/08/2017.
  */
@@ -13,7 +18,7 @@ public class UserModel {
     public String phone;
     public String website;
     public CompanyModel company;
-    public MessageModel[] messages;
+    public List<MessageModel> messages;
 }
 
 class AddressModel {
