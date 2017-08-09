@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">AJSONListDetail</string>
+    <string name="title_user_detail">User Detail</string>
+    <string name="list_title">User List</string>
+</resources>
